@@ -5,10 +5,10 @@ M		?= $(BUILD)/milestones
 
 DOCKER_VERSION	?= 5:20.10.9
 
-K8S_VERSION		?= 1.19.15
+K8S_VERSION		?= 1.21.6-00
 
-CALICO_VERSION		?= 3.8
-CALICOCTL_VERSION	?= 3.8.5
+CALICO_VERSION		?= 3.19
+CALICOCTL_VERSION	?= 3.19
 
 HELM_VERSION	?= 3.0.0
 HELM_PLATFORM	?= linux-amd64
@@ -68,10 +68,10 @@ $(M)/setup:
 /usr/bin/kubeadm: | $(M)/setup /usr/bin/docker
 	sudo apt-get update
 	sudo apt-get install -y apt-transport-https ca-certificates curl
-	sudo curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+	curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/kubernetes-archive-keyring.gpg
 	echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
 	sudo apt-get update
-	sudo apt-get install -y kubelet=${K8S_VERSION}-* kubeadm=${K8S_VERSION}-* kubectl=${K8S_VERSION}-*
+	sudo apt-get install -y kubelet=${K8S_VERSION} kubeadm=${K8S_VERSION} kubectl=${K8S_VERSION}
 	sudo apt-mark hold kubelet kubeadm kubectl
 	# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#configure-cgroup-driver-used-by-kubelet-on-control-plane-node
 	# When using Docker, kubeadm will automatically detect the cgroup driver for the kubelet
@@ -181,9 +181,11 @@ $(M)/kubeadm: | $(M)/setup /usr/bin/kubeadm
 	mkdir -p $(HOME)/.kube
 	sudo cp -f /etc/kubernetes/admin.conf $(HOME)/.kube/config
 	sudo chown $(shell id -u):$(shell id -g) $(HOME)/.kube/config
+	
 	# https://docs.projectcalico.org/v3.10/getting-started/kubernetes/installation/calico
 	# To use a pod CIDR different from 192.168.0.0/16, please replace it in calico.yaml with your own
-	kubectl apply -f https://docs.projectcalico.org/v${CALICO_VERSION}/manifests/calico.yaml
+	kubectl create -f https://docs.projectcalico.org/archive/v${CALICO_VERSION}/manifests/tigera-operator.yaml
+	kubectl create -f https://docs.projectcalico.org/archive/v${CALICO_VERSION}/manifests/custom-resources.yaml
 	kubectl taint nodes --all node-role.kubernetes.io/master-
 	touch $@
 	@echo "Kubernetes control plane node created!"
@@ -192,7 +194,8 @@ $(M)/kubeadm: | $(M)/setup /usr/bin/kubeadm
 $(M)/multus-init: | $(M)/kubeadm
 	# -git clone https://github.com/intel/multus-cni.git $(R)/multus
 	# cat $(R)/multus/images/multus-daemonset.yml | kubectl apply -f
-	kubectl apply -f https://raw.githubusercontent.com/intel/multus-cni/master/images/multus-daemonset.yml
+	#kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v3.7.2/images/multus-daemonset.yml
+	kubectl apply -f manifests/multus-daemon.yaml 
 	touch $@
 
 # https://github.com/intel/sriov-network-device-plugin
